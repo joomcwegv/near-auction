@@ -1,230 +1,191 @@
 package main
 
 import (
-    "encoding/json"
-    "strconv"
-    sdk "github.com/vlmoon99/near-sdk-go"
+	"math/big"
+
+	"github.com/vlmoon99/near-sdk-go/env"
+	"github.com/vlmoon99/near-sdk-go/types"
 )
 
-// Auction state structure
-type Auction struct {
-    Auctioneer    string            `json:"auctioneer"`
-    EndTime       uint64            `json:"end_time"`
-    HighestBid    sdk.Uint128       `json:"highest_bid"`
-    HighestBidder string            `json:"highest_bidder"`
-    Active        bool              `json:"active"`
-    Bids          map[string]sdk.Uint128 `json:"bids"`
-}
-
-var (
-    stateKey = []byte("state")
-)
-
-// Helper to load state, creates empty if none
-func loadState() (*Auction, error) {
-    raw, err := sdk.StorageRead(stateKey)
-    if err != nil {
-        return nil, err
-    }
-    if raw == nil {
-        return &Auction{Active: false, Bids: map[string]sdk.Uint128{}}, nil
-    }
-    var a Auction
-    if err := json.Unmarshal(raw, &a); err != nil {
-        return nil, err
-    }
-    return &a, nil
-}
-
-func saveState(a *Auction) error {
-    b, err := json.Marshal(a)
-    if err != nil {
-        return err
-    }
-    return sdk.StorageWrite(stateKey, b)
-}
-
-// Init args
-type InitArgs struct {
-    EndTime    uint64 `json:"end_time"`
-    Auctioneer  string `json:"auctioneer"`
+// @contract:state
+type Contract struct {
+	Auctioneer    string            `json:"auctioneer"`
+	EndTime       uint64            `json:"end_time"` // block time in ms
+	HighestBid    string            `json:"highest_bid"` // yoctoNEAR as string
+	HighestBidder string            `json:"highest_bidder"`
+	Active        bool              `json:"active"`
+	Bids          map[string]string `json:"bids"` // bidder -> total bid as string
 }
 
 // @contract:init
-func Init(args InitArgs) {
-    if args.Auctioneer == "" {
-        sdk.Panic("auctioneer must be set")
-    }
-    state := Auction{
-        Auctioneer:    args.Auctioneer,
-        EndTime:       args.EndTime,
-        HighestBid:    sdk.NewUint128(0),
-        HighestBidder: "",
-        Active:        true,
-        Bids:          map[string]sdk.Uint128{},
-    }
-    if err := saveState(&state); err != nil {
-        sdk.Panic(err.Error())
-    }
-    sdk.LogString("Auction initialized")
-}
-
-// View info
-type Info struct {
-    Auctioneer    string `json:"auctioneer"`
-    EndTime       uint64 `json:"end_time"`
-    HighestBid    string `json:"highest_bid"`
-    HighestBidder string `json:"highest_bidder"`
-    Active        bool   `json:"active"`
+func (c *Contract) Init(auctioneer string, end_time uint64) {
+	if auctioneer == "" {
+		env.PanicStr("Auctioneer must be set")
+	}
+	c.Auctioneer = auctioneer
+	c.EndTime = end_time
+	c.HighestBid = "0"
+	c.HighestBidder = ""
+	c.Active = true
+	c.Bids = make(map[string]string)
+	env.LogString("Auction contract initialized!")
 }
 
 // @contract:view
-func GetInfo() Info {
-    s, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    return Info{
-        Auctioneer:    s.Auctioneer,
-        EndTime:       s.EndTime,
-        HighestBid:    s.HighestBid.String(),
-        HighestBidder: s.HighestBidder,
-        Active:        s.Active,
-    }
+func (c *Contract) GetInfo() Contract {
+	return *c
 }
 
-// Place bid args
-type BidArgs struct {
-    Bid sdk.Uint128 `json:"bid"`
-}
-
-// @contract:payable [min_deposit=1]
+// @contract:payable
 // @contract:mutating
-func PlaceBid(_ BidArgs) {
-    state, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    if !state.Active {
-        sdk.Panic("auction not active")
-    }
-    if sdk.BlockTimestamp() > state.EndTime {
-        sdk.Panic("auction ended")
-    }
-    
-    deposit := sdk.AttachedDeposit()
-    sender := sdk.SignerAccountID()
-    
-    prev := state.Bids[sender]
-    newTotal := prev.Add(deposit)
-    state.Bids[sender] = newTotal
-    
-    if newTotal.GreaterThan(state.HighestBid) {
-        state.HighestBid = newTotal
-        state.HighestBidder = sender
-        sdk.LogString("new highest bid: " + newTotal.String())
-    }
-    if err := saveState(state); err != nil {
-        sdk.Panic(err.Error())
-    }
-}
+func (c *Contract) PlaceBid() {
+	if !c.Active {
+		env.PanicStr("Auction not active")
+	}
+	
+	now := env.GetBlockTimeMs()
+	if now > c.EndTime {
+		env.PanicStr("Auction ended")
+	}
 
-// Finalize auction (anyone can call after end)
-type FinalizeArgs struct{}
+	deposit, err := env.GetAttachedDeposit()
+	if err != nil {
+		env.PanicStr("Failed to get attached deposit: " + err.Error())
+	}
+	
+	zero, _ := types.U128FromString("0")
+	if deposit.Cmp(zero) <= 0 {
+		env.PanicStr("Bid must be greater than 0")
+	}
 
-// @contract:mutating
-func Finalize(_ FinalizeArgs) {
-    state, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    if !state.Active {
-        sdk.Panic("already finalized")
-    }
-    if sdk.BlockTimestamp() < state.EndTime {
-        sdk.Panic("auction not finished")
-    }
-    state.Active = false
-    // Pay winner amount to auctioneer
-    if state.HighestBid.GreaterThan(sdk.NewUint128(0)) {
-        sdk.Transfer(state.Auctioneer, state.HighestBid)
-        sdk.LogString("winner payout to auctioneer")
-    }
-    // Refund others
-    for addr, amount := range state.Bids {
-        if addr == state.HighestBidder {
-            continue
-        }
-        if amount.GreaterThan(sdk.NewUint128(0)) {
-            sdk.Transfer(addr, amount)
-        }
-    }
-    if err := saveState(state); err != nil {
-        sdk.Panic(err.Error())
-    }
-    sdk.LogString("auction finalized")
-}
+	sender, err := env.GetPredecessorAccountID()
+	if err != nil {
+		env.PanicStr("Failed to get predecessor account: " + err.Error())
+	}
 
-// Cancel (only auctioneer)
-type CancelArgs struct{}
+	prevBidStr := c.Bids[sender]
+	if prevBidStr == "" {
+		prevBidStr = "0"
+	}
+	
+	prevBid, ok := new(big.Int).SetString(prevBidStr, 10)
+	if !ok {
+		prevBid = big.NewInt(0)
+	}
+	
+	depInt, ok := new(big.Int).SetString(deposit.String(), 10)
+	if !ok {
+		depInt = big.NewInt(0)
+	}
+	
+	newTotalBid := new(big.Int).Add(prevBid, depInt)
+	c.Bids[sender] = newTotalBid.String()
 
-// @contract:mutating
-func Cancel(_ CancelArgs) {
-    state, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    if sdk.SignerAccountID() != state.Auctioneer {
-        sdk.Panic("only auctioneer can cancel")
-    }
-    if !state.Active {
-        sdk.Panic("already closed")
-    }
-    // Refund all bidders
-    for addr, amount := range state.Bids {
-        if amount.GreaterThan(sdk.NewUint128(0)) {
-            sdk.Transfer(addr, amount)
-        }
-    }
-    state.Active = false
-    if err := saveState(state); err != nil {
-        sdk.Panic(err.Error())
-    }
-    sdk.LogString("auction cancelled and refunds issued")
+	highestBid, ok := new(big.Int).SetString(c.HighestBid, 10)
+	if !ok {
+		highestBid = big.NewInt(0)
+	}
+
+	if newTotalBid.Cmp(highestBid) > 0 {
+		c.HighestBid = newTotalBid.String()
+		c.HighestBidder = sender
+		env.LogString("New highest bid: " + newTotalBid.String() + " by " + sender)
+	} else {
+		env.LogString("Bid recorded: total bid is " + newTotalBid.String() + " by " + sender)
+	}
 }
 
 // @contract:mutating
-func FixAuctioneer(new_auctioneer string) {
-    state, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    if state.Auctioneer != "" {
-        sdk.Panic("Auctioneer already set!")
-    }
-    state.Auctioneer = new_auctioneer
-    if err := saveState(state); err != nil {
-        sdk.Panic(err.Error())
-    }
-    sdk.LogString("Auctioneer fixed: " + new_auctioneer)
+func (c *Contract) Finalize() {
+	if !c.Active {
+		env.PanicStr("Already finalized")
+	}
+	
+	now := env.GetBlockTimeMs()
+	if now < c.EndTime {
+		env.PanicStr("Auction not finished yet")
+	}
+
+	c.Active = false
+
+	highestBidVal, ok := new(big.Int).SetString(c.HighestBid, 10)
+	if !ok {
+		highestBidVal = big.NewInt(0)
+	}
+
+	if highestBidVal.Cmp(big.NewInt(0)) > 0 {
+		highestBidU128, err := types.U128FromString(c.HighestBid)
+		if err != nil {
+			env.PanicStr("Failed to parse HighestBid: " + err.Error())
+		}
+		promiseId := env.PromiseBatchCreate([]byte(c.Auctioneer))
+		env.PromiseBatchActionTransfer(promiseId, highestBidU128)
+		env.LogString("Winner payout transfer to auctioneer initiated")
+	}
+
+	for bidder, bidStr := range c.Bids {
+		if bidder == c.HighestBidder {
+			continue
+		}
+		
+		bidVal, ok := new(big.Int).SetString(bidStr, 10)
+		if !ok || bidVal.Cmp(big.NewInt(0)) <= 0 {
+			continue
+		}
+		
+		bidU128, err := types.U128FromString(bidStr)
+		if err != nil {
+			env.PanicStr("Failed to parse bid: " + err.Error())
+		}
+		
+		promiseId := env.PromiseBatchCreate([]byte(bidder))
+		env.PromiseBatchActionTransfer(promiseId, bidU128)
+		env.LogString("Refunded " + bidStr + " yoctoNEAR to " + bidder)
+	}
 }
 
 // @contract:mutating
-func Withdraw() {
-    state, err := loadState()
-    if err != nil {
-        sdk.Panic(err.Error())
-    }
-    if sdk.SignerAccountID() != state.Auctioneer {
-        sdk.Panic("Only auctioneer can withdraw")
-    }
-    balance := sdk.AccountBalance()
-    if balance.GreaterThan(sdk.NewUint128(0)) {
-        sdk.Transfer(state.Auctioneer, balance)
-        sdk.LogString("All funds withdrawn by auctioneer")
-    }
+func (c *Contract) Cancel() {
+	sender, err := env.GetPredecessorAccountID()
+	if err != nil {
+		env.PanicStr("Failed to get predecessor account: " + err.Error())
+	}
+	
+	if sender != c.Auctioneer {
+		env.PanicStr("Only auctioneer can cancel the auction")
+	}
+	
+	if !c.Active {
+		env.PanicStr("Auction is already inactive")
+	}
+
+	c.Active = false
+
+	for bidder, bidStr := range c.Bids {
+		bidVal, ok := new(big.Int).SetString(bidStr, 10)
+		if !ok || bidVal.Cmp(big.NewInt(0)) <= 0 {
+			continue
+		}
+		
+		bidU128, err := types.U128FromString(bidStr)
+		if err != nil {
+			env.PanicStr("Failed to parse bid: " + err.Error())
+		}
+		
+		promiseId := env.PromiseBatchCreate([]byte(bidder))
+		env.PromiseBatchActionTransfer(promiseId, bidU128)
+		env.LogString("Refunded " + bidStr + " yoctoNEAR to " + bidder)
+	}
+	env.LogString("Auction cancelled and all refunds initiated")
 }
 
-func main() {
-    // near-go automatically builds WASM from this file.
+// @contract:mutating
+func (c *Contract) FixAuctioneer(new_auctioneer string) {
+	if c.Auctioneer != "" {
+		env.PanicStr("Auctioneer already set")
+	}
+	c.Auctioneer = new_auctioneer
+	env.LogString("Auctioneer fixed: " + new_auctioneer)
 }
+
+func main() {}
