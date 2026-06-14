@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Go
       uses: actions/setup-go@v4
@@ -33,7 +33,7 @@ jobs:
         tinygo build -target wasi -gc=leaking -opt=0 -no-debug -o ../main.wasm .
 
     - name: Upload WASM Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: main.wasm
         path: main.wasm
