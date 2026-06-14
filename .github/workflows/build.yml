@@ -22,10 +22,7 @@ jobs:
         wget https://github.com/tinygo-org/tinygo/releases/download/v0.31.0/tinygo_0.31.0_amd64.deb
         sudo dpkg -i tinygo_0.31.0_amd64.deb
 
-    - name: Install near-go CLI
-      run: |
-        go install github.com/near/near-go/cmd/near-go@latest
-        echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
 
     - name: Build contract
       run: |
