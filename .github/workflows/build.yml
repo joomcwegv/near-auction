@@ -3,34 +3,43 @@ name: Build Contract
 on:
   push:
     branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Go
-      uses: actions/setup-go@v4
-      with:
-        go-version: '1.25.x'
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
 
-    - name: Install TinyGo
-      run: |
-        wget https://github.com/tinygo-org/tinygo/releases/download/v0.41.1/tinygo_0.41.1_amd64.deb
-        sudo dpkg -i tinygo_0.41.1_amd64.deb
+      - name: Install near-cli-go (from our fork)
+        run: |
+          git clone -b fix/critical-bugs https://github.com/joomcwegv/near-cli-go.git
+          cd near-cli-go
+          chmod +x setup.sh
+          ./setup.sh
+          go build -o near-go .
+          mkdir -p $HOME/.near-go
+          cp near-go $HOME/.near-go/
+          cp setup.sh $HOME/.near-go/
+          echo "$HOME/.near-go" >> $GITHUB_PATH
+          echo "$HOME/.near-go/tinygo/bin" >> $GITHUB_PATH
 
+      - name: Build Contract
+        run: |
+          cd contract
+          go mod tidy
+          near-go build project
+          echo "Build finished! Directory contents:"
+          ls -la
 
-
-    - name: Build contract
-      run: |
-        cd contract
-        tinygo build -target wasi -gc=leaking -opt=0 -no-debug -o ../main.wasm .
-
-    - name: Upload WASM Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: main.wasm
-        path: main.wasm
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: main.wasm
+          path: contract/main.wasm
+          if-no-files-found: error
