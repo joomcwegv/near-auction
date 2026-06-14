@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="NEAR Auction - Place bids on the NEAR blockchain testnet">
+    <title>NEAR Auction</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="bg-grid"></div>
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
+
+    <nav id="navbar">
+        <div class="nav-brand">
+            <div class="logo-icon">⚡</div>
+            <span class="logo-text">NEAR Auction</span>
+        </div>
+        <button id="connectBtn" class="btn btn-connect">
+            <span class="btn-icon">🔗</span>
+            <span id="connectText">Connect Wallet</span>
+        </button>
+    </nav>
+
+    <main>
+        <!-- Hero Section -->
+        <section id="hero" class="section hero-section">
+            <div class="hero-badge">🔥 Live on NEAR Testnet</div>
+            <h1>Decentralized <span class="gradient-text">Auction</span></h1>
+            <p class="hero-subtitle">Place your bids securely on the NEAR blockchain. Transparent, fast, and trustless.</p>
+        </section>
+
+        <!-- Auction Info Card -->
+        <section id="auction-info" class="section">
+            <div class="card auction-card">
+                <div class="card-header">
+                    <h2>🏷️ Auction Status</h2>
+                    <div id="statusBadge" class="status-badge active">
+                        <span class="pulse"></span> Active
+                    </div>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Auctioneer</span>
+                        <span id="auctioneerDisplay" class="info-value mono">Loading...</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">⏰ Time Remaining</span>
+                        <span id="timerDisplay" class="info-value timer-value">--:--:--</span>
+                    </div>
+                    <div class="info-item highlight-item">
+                        <span class="info-label">💰 Highest Bid</span>
+                        <span id="highestBidDisplay" class="info-value bid-value">0 NEAR</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">👑 Leading Bidder</span>
+                        <span id="highestBidderDisplay" class="info-value mono">Nobody yet</span>
+                    </div>
+                </div>
+
+                <!-- Bid History -->
+                <div class="bid-history">
+                    <h3>📊 All Bids</h3>
+                    <div id="bidsList" class="bids-list">
+                        <p class="empty-bids">No bids yet. Be the first!</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Place Bid Section -->
+        <section id="bid-section" class="section">
+            <div class="card bid-card">
+                <h2>🚀 Place Your Bid</h2>
+                <p class="bid-description">Attach NEAR tokens to place your bid. Your total cumulative bid counts!</p>
+                
+                <div class="bid-form">
+                    <div class="input-group">
+                        <input type="number" id="bidAmount" placeholder="0.00" step="0.1" min="0.1" class="bid-input">
+                        <span class="input-suffix">NEAR</span>
+                    </div>
+                    <div class="quick-amounts">
+                        <button class="quick-btn" data-amount="0.5">0.5 Ⓝ</button>
+                        <button class="quick-btn" data-amount="1">1 Ⓝ</button>
+                        <button class="quick-btn" data-amount="2">2 Ⓝ</button>
+                        <button class="quick-btn" data-amount="5">5 Ⓝ</button>
+                    </div>
+                    <button id="placeBidBtn" class="btn btn-bid" disabled>
+                        <span>⚡ Place Bid</span>
+                    </button>
+                    <p id="bidStatus" class="bid-status"></p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Admin Panel -->
+        <section id="admin-section" class="section" style="display: none;">
+            <div class="card admin-card">
+                <h2>🔐 Admin Panel</h2>
+                <p class="admin-desc">Only visible to the auctioneer</p>
+                <div class="admin-buttons">
+                    <button id="cancelBtn" class="btn btn-danger">❌ Cancel Auction</button>
+                    <button id="finalizeBtn" class="btn btn-success">✅ Finalize Auction</button>
+                    <button id="withdrawBtn" class="btn btn-warning">💸 Withdraw Funds</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <p>Built on <span class="gradient-text">NEAR Protocol</span> • Testnet</p>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/near-api-js@0.44.2/dist/near-api-js.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
